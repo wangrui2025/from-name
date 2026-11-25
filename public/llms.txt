@@ -1,0 +1,8 @@
+# Pokémon Name Gallery
+
+以 Pokémon 名称为起点的独立素材浏览与对照图库。
+
+- [Main gallery](https://wangrui2025.github.io/from-name/) — original public gallery and its interaction.
+
+- [Agent reader](https://wangrui2025.github.io/from-name/agent/) — site structure, source links and limits.
+- [Structured catalog](https://wangrui2025.github.io/from-name/agent/site.json) — same public reader data in JSON.
