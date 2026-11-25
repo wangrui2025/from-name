@@ -1,3 +1,14 @@
+# Wish · Pokémon Name Gallery
+
+- [LATEST.md](LATEST.md) — current product intent.
+- [DESIGN.md](DESIGN.md) — information architecture and product interpretation.
+- [ARCHIVE.md](ARCHIVE.md) — replaced center wishes, when they really exist.
+- [Agent entrypoint](../../AGENTS.md) · [Dev](../dev/README.md).
+
+This folder owns project intent, not source facts, CSS or deployment permissions.
+
+## Existing owner feedback (preserved)
+
 # Pokémon name-based gallery · 交互品质愿望（2026-11-20 · 交互品质参考）
 
 这座按 Pokémon 名称浏览的图库希望让访客轻松找到目标、理解图像之间的关系并完成选择。未来改进时，重点是**可感知的悬停/键盘聚焦/触控与选中反馈**，以及图标、文字、缩略图的大小、对齐与间距；即使素材风格不同，操作区也应有稳定的视觉节奏。
