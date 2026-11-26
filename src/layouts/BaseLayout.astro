@@ -68,7 +68,7 @@ const defaultId = 1;
     <script is:inline define:vars={{ pokespriteNames, POKESPRITE_BASE }}>
       (function() {
         // Randomly pick a Pokemon name from pokesprite
-        var randomName = pokespriteNames[Math.floor(Math.random() * pokespriteNames.length)];
+        var randomName = pokespriteNames[Math.floor(Math.random() * pokespriteNames.length)] || "pikachu";
         if (!randomName) return;
 
         localStorage.setItem('preferred-pokemon-name', randomName);

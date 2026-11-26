@@ -45,11 +45,12 @@ const generations = Array.from(
         <img
           id="pokemon-img"
           class="pokemon-main-img"
-          src=""
           alt="Pokemon"
+          hidden
           width="96"
           height="96"
         />
+        <p id="pokemon-image-status" role="status">Loading sprite…</p>
         <div class="pokemon-info">
           <span id="poke-id" class="poke-id">#?</span>
           <span id="poke-name" class="poke-name">Loading...</span>
@@ -63,7 +64,7 @@ const generations = Array.from(
         🎲 Random
       </button>
 
-      <button id="btn-compare" class="control-btn compare-btn" title="Compare all sources">
+      <button id="btn-compare" disabled class="control-btn compare-btn" title="Compare all sources">
         📊 Compare All Sources
       </button>
     </div>
@@ -129,6 +130,26 @@ const generations = Array.from(
 
     const mainDisplay = document.getElementById('main-display') as HTMLDivElement;
     const pokemonImg = document.getElementById('pokemon-img') as HTMLImageElement;
+    const imageStatus = document.getElementById('pokemon-image-status')!;
+    function mainImageState(ok: boolean) {
+      pokemonImg.hidden = !ok;
+      imageStatus.hidden = ok;
+      imageStatus.textContent = ok ? '' : 'Sprite unavailable — try another Pokémon.';
+    }
+    pokemonImg.addEventListener('load', () => mainImageState(true));
+    pokemonImg.addEventListener('error', () => mainImageState(false));
+    function markMissing(img: HTMLImageElement) {
+      img.classList.add('error');
+      img.parentElement?.classList.add('show-placeholder');
+      img.parentElement?.setAttribute('role', 'img');
+      img.parentElement?.setAttribute('aria-label', img.alt + ': sprite unavailable');
+    }
+    function markLoaded(img: HTMLImageElement) {
+      img.classList.remove('error');
+      img.parentElement?.classList.remove('show-placeholder');
+      img.parentElement?.removeAttribute('aria-label');
+      img.parentElement?.removeAttribute('role');
+    }
     const pokeId = document.getElementById('poke-id') as HTMLElement;
     const pokeName = document.getElementById('poke-name') as HTMLElement;
     const btnRandom = document.getElementById('btn-random') as HTMLButtonElement;
@@ -141,6 +162,9 @@ const generations = Array.from(
 
     let currentPokemonName: string = '';
     let currentPokemonId: number = 0;
+    let selection = 0;
+    const knownIds: Record<string, number> = {pikachu:25, bulbasaur:1, charmander:4, squirtle:7};
+    const fallbackNames = Object.keys(knownIds);
 
     function showToast(message: string) {
       if (!toast) return;
@@ -151,7 +175,7 @@ const generations = Array.from(
 
     async function fetchPokemonByName(name: string) {
       try {
-        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${name.toLowerCase()}`);
+        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${name.toLowerCase()}`, {signal: AbortSignal.timeout(6000)});
         if (res.ok) {
           const data = await res.json();
           return {
@@ -170,6 +194,11 @@ const generations = Array.from(
 
     function setMainDisplay(name: string, id?: number) {
       currentPokemonName = name;
+      currentPokemonId = id || knownIds[name] || 0;
+      btnCompare.disabled = !currentPokemonId;
+      pokemonImg.hidden = true;
+      imageStatus.hidden = false;
+      imageStatus.textContent = "Loading sprite…";
 
       // Set the main image to pokesprite
       pokemonImg.src = `${POKESPRITE_BASE}/regular/${name}.png`;
@@ -179,16 +208,15 @@ const generations = Array.from(
       pokeName.textContent = name.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
       // Set ID if available
-      if (id) {
-        currentPokemonId = id;
-        pokeId.textContent = `#${id}`;
+      if (currentPokemonId) {
+        pokeId.textContent = `#${currentPokemonId}`;
       } else {
         pokeId.textContent = '#?';
       }
 
       // Update grid images if visible
-      if (id && id > 0) {
-        updateGridImages(id);
+      if (currentPokemonId > 0) {
+        updateGridImages(currentPokemonId);
         gridPokemonName.textContent = pokeName.textContent;
       }
     }
@@ -203,21 +231,21 @@ const generations = Array.from(
         if (!source) return;
 
         if (!isValidForSource(id, source)) {
-          el.src = '';
-          el.classList.add('error');
-          el.parentElement?.classList.add('show-placeholder');
+          el.removeAttribute('src');
+          markMissing(el);
         } else {
-          el.classList.remove('error');
-          el.parentElement?.classList.remove('show-placeholder');
           const newUrl = source.url(id);
-          if (el.src !== newUrl) {
+          if (el.src !== newUrl || el.classList.contains('error')) {
+            markLoaded(el);
             el.src = newUrl;
           }
+          if (el.complete && !el.naturalWidth) markMissing(el);
         }
       });
     }
 
     function showGrid() {
+      if (!currentPokemonId) return;
       mainDisplay.style.display = 'none';
       spriteGrid.style.display = 'grid';
     }
@@ -227,43 +255,40 @@ const generations = Array.from(
       mainDisplay.style.display = 'block';
     }
 
+    async function selectName(name: string) {
+      const request = ++selection;
+      setMainDisplay(name, knownIds[name]);
+      const info = await fetchPokemonByName(name);
+      if (request !== selection) return;
+      if (info?.id && info.id !== currentPokemonId) setMainDisplay(name, info.id);
+      localStorage.setItem('preferred-pokemon-name', name);
+      if (currentPokemonId) localStorage.setItem('preferred-pokemon-id', String(currentPokemonId));
+      else localStorage.removeItem('preferred-pokemon-id');
+      const icon = document.getElementById('pokemon-favicon') as HTMLLinkElement | null;
+      if (icon) icon.href = POKESPRITE_BASE + '/regular/' + name + '.png';
+    }
+
     async function randomize() {
-      // Fetch the list of available Pokemon names
+      let names = fallbackNames;
       try {
-        const res = await fetch('https://api.github.com/repos/msikma/pokesprite/contents/pokemon-gen8/regular');
+        const res = await fetch('https://api.github.com/repos/msikma/pokesprite/contents/pokemon-gen8/regular', {signal: AbortSignal.timeout(6000)});
         if (res.ok) {
           const files = await res.json();
-          const names = files
-            .filter((f: any) => f.name.endsWith('.png'))
-            .map((f: any) => f.name.replace('.png', ''));
-
-          const randomName = names[Math.floor(Math.random() * names.length)];
-          if (randomName) {
-            // Try to get the ID from PokeAPI
-            const info = await fetchPokemonByName(randomName);
-            setMainDisplay(randomName, info?.id);
-
-            // Update favicon
-            const faviconLink = document.getElementById('pokemon-favicon') as HTMLLinkElement | null;
-            if (faviconLink) {
-              faviconLink.href = `${POKESPRITE_BASE}/regular/${randomName}.png`;
-            }
-
-            // Save to localStorage
-            localStorage.setItem('preferred-pokemon-name', randomName);
-            if (info?.id) {
-              localStorage.setItem('preferred-pokemon-id', String(info.id));
-            }
-
-            showToast(`Random: ${randomName}`);
-            return;
+          if (Array.isArray(files)) {
+            const available = files.filter((f: any) => typeof f.name === 'string' && /^[a-z0-9-]+[.]png$/.test(f.name)).map((f: any) => f.name.slice(0,-4));
+            if (available.length) names = available;
           }
         }
-      } catch (e) {
-        console.error('Failed to randomize:', e);
-        showToast('Failed to load Pokemon list');
-      }
+      } catch {}
+      const name = names[Math.floor(Math.random() * names.length)];
+      await selectName(name);
     }
+
+    spriteGrid.querySelectorAll<HTMLImageElement>('.sprite-img').forEach(img => {
+      img.addEventListener('load', () => markLoaded(img));
+      img.addEventListener('error', () => markMissing(img));
+      if (img.complete && !img.naturalWidth) markMissing(img);
+    });
 
     // Event listeners
     btnRandom.addEventListener('click', randomize);
@@ -288,14 +313,7 @@ const generations = Array.from(
 
     // Initial load
     async function init() {
-      const initialName = window.__INITIAL_POKEMON_NAME__;
-      if (initialName) {
-        const info = await fetchPokemonByName(initialName);
-        setMainDisplay(initialName, info?.id);
-      } else {
-        // No initial name, randomize
-        await randomize();
-      }
+      await selectName(window.__INITIAL_POKEMON_NAME__ || 'pikachu');
     }
     init();
   </script>
@@ -323,6 +341,9 @@ const generations = Array.from(
       border-radius: 8px;
     }
 
+    #pokemon-image-status { min-height: 96px; display: grid; place-items: center; text-align: center; }
+    #pokemon-image-status[hidden], .pokemon-main-img[hidden] { display: none; }
+
     .pokemon-info {
       display: flex;
       flex-direction: column;
@@ -332,7 +353,7 @@ const generations = Array.from(
 
     .poke-id {
       font-size: 1rem;
-      color: #666;
+      color: var(--color-text-secondary);
       font-family: monospace;
     }
 
@@ -360,18 +381,20 @@ const generations = Array.from(
       transition: all 0.2s;
     }
 
+    .control-btn:disabled { opacity: .65; cursor: not-allowed; }
+
     .control-btn:hover {
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
 
     .random-btn {
-      background: #ff6b6b;
+      background: #a63737;
       color: white;
     }
 
     .compare-btn {
-      background: #4ecdc4;
+      background: #176961;
       color: white;
     }
 
@@ -470,11 +493,11 @@ const generations = Array.from(
     }
 
     :global(.dark) .random-btn {
-      background: #ff5252;
+      background: #a63737;
     }
 
     :global(.dark) .compare-btn {
-      background: #26a69a;
+      background: #176961;
     }
 
     :global(.dark) .back-btn {
